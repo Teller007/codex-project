@@ -90,6 +90,7 @@ test('a circular grayscale PNG with transparent corners still has its inner back
 
 test('original transparent overlay appears above the portrait and travels in the shareable site', async ({ page }) => {
   await page.goto('/');
+  await expect(page.locator('#template-label')).toHaveText('העיצוב המקורי שלכם');
   await page.locator('.template-settings summary').click();
   const overlay = await page.evaluate(() => {
     const canvas = document.createElement('canvas'); canvas.width = 1080; canvas.height = 1350;
@@ -140,6 +141,8 @@ test('the original bundled text-and-logo layer is rendered without reconstructed
   await page.goto('/');
   await expect(page.locator('#template-label')).toHaveText('העיצוב המקורי שלכם');
   await expect(page.locator('#reset-template')).toHaveText('חזרה לעיצוב המקורי');
+  // The label updates synchronously; canvas rendering is scheduled for the next frame.
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
   const result = await page.evaluate(async () => {
     const image = new Image(); image.src = '/template-overlay.png'; await image.decode();
     const canvas = document.createElement('canvas'); canvas.width = 1080; canvas.height = 160;

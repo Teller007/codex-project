@@ -185,7 +185,7 @@ try {
   if (!state.uploaded && !busy) { state.portrait = sample; draw(); }
 } catch { /* A neutral silhouette remains if the demo asset is unavailable. */ }
 try {
-  const response = await fetch(`${import.meta.env.BASE_URL}template.json`);
+  const response = await fetch(`${import.meta.env.BASE_URL}template.json`, { cache: 'no-cache' });
   if (response.ok) {
     const config = await response.json();
     let source = null;
