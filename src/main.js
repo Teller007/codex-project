@@ -7,6 +7,7 @@ import '@fontsource/barlow-condensed/400.css';
 import '@fontsource/barlow-condensed/700.css';
 import './style.css';
 import { renderPoster, WIDTH, HEIGHT } from './poster.js';
+import { PHOTO_DEFAULTS } from './photo-effects.js';
 import { readImage, removeBackground, hasTransparency, loadImage, canvasToBlob, download } from './images.js';
 
 const icons = {
@@ -35,8 +36,9 @@ document.querySelector('#app').innerHTML = `
         <input id="photo" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" aria-label="העלאת תמונה" />
         <button id="upload" class="upload-area" type="button"><span class="upload-icon">${icon('upload')}</span><strong id="upload-label">העלו תמונה שלכם</strong><span id="upload-hint">גררו לכאן או לחצו לבחירת קובץ</span><span class="file-types" dir="ltr">JPG, PNG, WebP · up to 20 MB</span></button>
         <div class="photo-guidance">${icon('image')}<p>לתוצאה הכי טובה: צילום מול המצלמה, מהמותניים ומעלה, עם ידיים משולבות.</p></div>
-        <div class="processing-options"><label class="check-option"><input type="checkbox" id="remove-bg" checked /><span>הסרת רקע אוטומטית</span>${icon('sparkle')}</label><p>הפנים והפוזה נשארים כמו בתמונה המקורית.</p><p>אם הרקע כבר הוסר מהתמונה, אפשר לבטל את האפשרות.</p></div>
-        <details id="position-panel" class="adjustments"><summary>${icon('settings')}<span>דיוק המיקום והתאורה</span><span class="chevron">⌄</span></summary><div class="sliders"><div class="range-field"><label for="scale">גודל התמונה <output id="scale-value">100%</output></label><input id="scale" type="range" min="60" max="155" value="100" /></div><div class="range-field"><label for="offset-x">מיקום אופקי</label><input id="offset-x" type="range" min="-220" max="220" value="0" /></div><div class="range-field"><label for="offset-y">מיקום אנכי</label><input id="offset-y" type="range" min="-300" max="300" value="0" /></div><div class="range-field"><label for="rim">אור כתום בקצוות <output id="rim-value">65%</output></label><input id="rim" type="range" min="0" max="100" value="65" /></div><button id="reset-position" class="text-button" type="button">${icon('reset')}איפוס מיקום</button><p class="adjustment-note">האפקט מוסיף זוהר בקצוות; הוא אינו משנה את התאורה על הפנים.</p></div></details>
+        <div class="processing-options"><label class="check-option"><input type="checkbox" id="remove-bg" checked /><span>הסרת רקע אוטומטית</span>${icon('sparkle')}</label><p>הפנים והפוזה נשארים כמו בתמונה המקורית.</p><p>אם הרקע כבר הוסר מהתמונה, אפשר לבטל את האפשרות.</p><label class="check-option enhancement-option"><input type="checkbox" id="enhance" checked /><span>עיבוד תמונה עדין</span>${icon('sparkle')}</label><p>שיפור עדין של הבהירות, הקונטרסט והצבע לרקע שחור.</p></div>
+        <details id="position-panel" class="adjustments"><summary>${icon('settings')}<span>דיוק המיקום</span><span class="chevron">⌄</span></summary><div class="sliders"><div class="range-field"><label for="scale">גודל התמונה <output id="scale-value">100%</output></label><input id="scale" type="range" min="60" max="155" value="100" /></div><div class="range-field"><label for="offset-x">מיקום אופקי</label><input id="offset-x" type="range" min="-220" max="220" value="0" /></div><div class="range-field"><label for="offset-y">מיקום אנכי</label><input id="offset-y" type="range" min="-300" max="300" value="0" /></div><button id="reset-position" class="text-button" type="button">${icon('reset')}איפוס מיקום</button></div></details>
+        <details id="effects-panel" class="adjustments"><summary>${icon('sparkle')}<span>תאורה, צבע וזוהר פנימי</span><span class="chevron">⌄</span></summary><div class="sliders"><div class="tone-controls"><div class="range-field"><label for="brightness">בהירות <output id="brightness-value">104%</output></label><input id="brightness" type="range" min="70" max="130" value="104" /></div><div class="range-field"><label for="contrast">קונטרסט <output id="contrast-value">108%</output></label><input id="contrast" type="range" min="80" max="135" value="108" /></div><div class="range-field"><label for="saturation">רוויה <output id="saturation-value">98%</output></label><input id="saturation" type="range" min="0" max="140" value="98" /></div></div><div class="range-field glow-start"><label for="rim">זוהר כתום פנימי <output id="rim-value">65%</output></label><input id="rim" type="range" min="0" max="100" value="65" /></div><div class="range-field"><label for="rim-width">רוחב הזוהר <output id="rim-width-value">18</output></label><input id="rim-width" type="range" min="4" max="40" value="18" /></div><button id="reset-effects" class="text-button" type="button">${icon('reset')}איפוס העיבוד</button><p class="adjustment-note">הזוהר צובע בעדינות את הדמות מבפנים, לאורך הקצוות. הוא פועל על תמונה שהרקע שלה הוסר.</p></div></details>
         <button id="download" class="primary-button" type="button" disabled>${icon('download')}<span>הורדת הפוסט שלי</span>${icon('arrow')}</button>
         <p id="status" class="status" role="status" aria-live="polite">הוסיפו שם, טייטל ותמונה כדי להוריד את הפוסט.</p>
         <div class="privacy">${icon('lock')}<span>התמונה שלכם נשארת בדפדפן. אין העלאה לשרת.</span></div>
@@ -49,7 +51,7 @@ document.querySelector('#app').innerHTML = `
 `;
 
 const $ = (selector) => document.querySelector(selector);
-const state = { name: '', title: '', portrait: null, foreground: null, background: null, cutout: true, scale: 1, x: 0, y: 0, rim: 65, uploaded: false };
+const state = { name: '', title: '', portrait: null, foreground: null, background: null, cutout: true, scale: 1, x: 0, y: 0, ...PHOTO_DEFAULTS, uploaded: false };
 let originalPhoto = null;
 let publishedTemplate = null;
 let busy = false;
@@ -87,7 +89,7 @@ async function processPhoto() {
     $('#upload-label').textContent = 'התמונה שלכם בפנים';
     $('#upload-hint').textContent = 'לחצו כדי להחליף תמונה';
     $('#upload').classList.add('has-image');
-    setStatus('התמונה מוכנה. אפשר לדייק את המיקום לפני ההורדה.');
+    setStatus('התמונה מוכנה. אפשר לכוון מיקום, תאורה וזוהר לפני ההורדה.');
   } catch (error) { setStatus(error.message, true); }
   finally { setBusy(false); }
 }
@@ -107,9 +109,22 @@ $('#remove-bg').addEventListener('change', processPhoto);
 ['dragleave', 'drop'].forEach((event) => $('#upload').addEventListener(event, (e) => { e.preventDefault(); $('#upload').classList.remove('dragging'); }));
 $('#upload').addEventListener('drop', (e) => uploadPhoto(e.dataTransfer.files[0]));
 ['name', 'title'].forEach((field) => $(`#${field}`).addEventListener('input', (e) => { state[field] = e.target.value; $('#name-count').textContent = `${state.name.length} / 50`; draw(); }));
-const controls = { scale: (v) => { state.scale = v / 100; $('#scale-value').value = `${v}%`; }, 'offset-x': (v) => { state.x = v; }, 'offset-y': (v) => { state.y = v; }, rim: (v) => { state.rim = v; $('#rim-value').value = `${v}%`; } };
+const controls = { scale: (v) => { state.scale = v / 100; $('#scale-value').value = `${v}%`; }, 'offset-x': (v) => { state.x = v; }, 'offset-y': (v) => { state.y = v; }, rim: (v) => { state.rim = v; $('#rim-value').value = `${v}%`; }, 'rim-width': (v) => { state.rimWidth = v; $('#rim-width-value').value = v; } };
+['brightness', 'contrast', 'saturation'].forEach((id) => { controls[id] = (v) => { state[id] = v; $(`#${id}-value`).value = `${v}%`; }; });
 Object.entries(controls).forEach(([id, update]) => $(`#${id}`).addEventListener('input', (e) => { update(Number(e.target.value)); draw(); }));
-$('#reset-position').addEventListener('click', () => { Object.entries({ scale: 100, 'offset-x': 0, 'offset-y': 0, rim: 65 }).forEach(([id, value]) => { $(`#${id}`).value = value; controls[id](value); }); draw(); });
+function updateEnhancement() {
+  state.enhance = $('#enhance').checked;
+  ['brightness', 'contrast', 'saturation'].forEach((id) => { $(`#${id}`).disabled = !state.enhance; });
+  $('.tone-controls').classList.toggle('inactive', !state.enhance);
+  draw();
+}
+$('#enhance').addEventListener('change', updateEnhancement);
+$('#reset-position').addEventListener('click', () => { Object.entries({ scale: 100, 'offset-x': 0, 'offset-y': 0 }).forEach(([id, value]) => { $(`#${id}`).value = value; controls[id](value); }); draw(); });
+$('#reset-effects').addEventListener('click', () => {
+  ['brightness', 'contrast', 'saturation', 'rim'].forEach((id) => { $(`#${id}`).value = PHOTO_DEFAULTS[id]; controls[id](PHOTO_DEFAULTS[id]); });
+  $('#rim-width').value = PHOTO_DEFAULTS.rimWidth; controls['rim-width'](PHOTO_DEFAULTS.rimWidth);
+  $('#enhance').checked = PHOTO_DEFAULTS.enhance; updateEnhancement();
+});
 
 $('#download').addEventListener('click', async () => {
   if (busy || !state.uploaded || !state.name.trim() || !state.title.trim()) return;

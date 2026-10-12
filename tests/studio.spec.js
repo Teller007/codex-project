@@ -19,8 +19,23 @@ test('upload, live editing, positioning, and correctly sized PNG export', async 
   await page.locator('#position-panel summary').click();
   await page.locator('#scale').fill('115');
   await expect(page.locator('#scale-value')).toHaveText('115%');
+  await page.locator('#effects-panel summary').click();
+  await page.locator('#brightness').fill('120');
+  await page.locator('#rim-width').fill('30');
+  await expect(page.locator('#brightness-value')).toHaveText('120%');
+  await expect(page.locator('#rim-width-value')).toHaveText('30');
+  await page.locator('#enhance').uncheck();
+  await expect(page.locator('#brightness')).toBeDisabled();
+  await expect(page.locator('#rim')).toBeEnabled();
   await page.locator('#reset-position').click();
   await expect(page.locator('#scale-value')).toHaveText('100%');
+  await expect(page.locator('#brightness')).toHaveValue('120');
+  await page.locator('#reset-effects').click();
+  await expect(page.locator('#enhance')).toBeChecked();
+  await expect(page.locator('#brightness')).toBeEnabled();
+  await expect(page.locator('#brightness-value')).toHaveText('104%');
+  await expect(page.locator('#rim-value')).toHaveText('65%');
+  await expect(page.locator('#rim-width-value')).toHaveText('18');
   const saved = page.waitForEvent('download');
   await page.getByRole('button', { name: 'הורדת הפוסט שלי' }).click();
   const file = await saved;
@@ -30,6 +45,61 @@ test('upload, live editing, positioning, and correctly sized PNG export', async 
   expect(png.readUInt32BE(20)).toBe(1350);
   expect(file.suggestedFilename()).toBe('דנה-כהן-sports-tech-nation.png');
   expect(failures).toEqual([]);
+});
+
+test('inner orange light warms the silhouette edge without expanding or changing its alpha mask', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const { processPortrait } = await import('/src/photo-effects.js');
+    const source = document.createElement('canvas'); source.width = 480; source.height = 1120;
+    const ctx = source.getContext('2d');
+    ctx.fillStyle = '#808080'; ctx.fillRect(60, 100, 360, 920);
+    ctx.fillStyle = 'rgba(128,128,128,.5)'; ctx.fillRect(54, 100, 6, 920);
+    const original = ctx.getImageData(0, 0, 480, 1120).data;
+    const narrow = processPortrait(source, { enhance: false, rim: 80, rimWidth: 8 });
+    const narrowPixel = [...narrow.getContext('2d').getImageData(84, 500, 1, 1).data];
+    const wide = processPortrait(source, { enhance: false, rim: 80, rimWidth: 40 });
+    const pixels = wide.getContext('2d').getImageData(0, 0, 480, 1120).data;
+    const pixel = (x, y) => [...pixels.slice((y * 480 + x) * 4, (y * 480 + x) * 4 + 4)];
+    let alphaDifferences = 0, outsideLight = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      if (pixels[i + 3] !== original[i + 3]) alphaDifferences++;
+      if (original[i + 3] === 0 && pixels[i] + pixels[i + 1] + pixels[i + 2] > 0) outsideLight++;
+    }
+    return { alphaDifferences, outsideLight, edge: pixel(64, 500), center: pixel(240, 500), widePixel: pixel(84, 500), narrowPixel, unchanged: [...ctx.getImageData(64, 500, 1, 1).data] };
+  });
+  expect(result.alphaDifferences).toBe(0);
+  expect(result.outsideLight).toBe(0);
+  expect(result.edge[0]).toBeGreaterThan(result.edge[1] + 15);
+  expect(result.edge[1]).toBeGreaterThan(result.edge[2]);
+  expect(result.center).toEqual([128, 128, 128, 255]);
+  expect(result.widePixel[0]).toBeGreaterThan(result.narrowPixel[0] + 15);
+  expect(result.unchanged).toEqual([128, 128, 128, 255]);
+});
+
+test('photo tone controls affect color and brightness while preserving transparency and the original photo', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const { processPortrait } = await import('/src/photo-effects.js');
+    const source = document.createElement('canvas'); source.width = source.height = 120;
+    const ctx = source.getContext('2d'); ctx.fillStyle = '#804020'; ctx.fillRect(20, 20, 80, 80);
+    const read = (image) => [...image.getContext('2d').getImageData(50, 50, 1, 1).data];
+    const neutral = read(source);
+    const bright = read(processPortrait(source, { brightness: 125, contrast: 100, saturation: 100, rim: 0 }));
+    const gray = read(processPortrait(source, { brightness: 100, contrast: 100, saturation: 0, rim: 0 }));
+    const disabled = read(processPortrait(source, { enhance: false, brightness: 125, saturation: 0, rim: 0 }));
+    const processed = processPortrait(source, { rim: 100, cutout: false });
+    const withoutRim = processPortrait(source, { rim: 0 });
+    return { neutral, bright, gray, disabled, original: read(source), rimDisabled: read(processed), withoutRim: read(withoutRim), outside: [...processed.getContext('2d').getImageData(0, 0, 1, 1).data] };
+  });
+  expect(result.bright[0]).toBeGreaterThan(result.neutral[0]);
+  expect(result.bright[1]).toBeGreaterThan(result.neutral[1]);
+  expect(result.gray[0]).toBe(result.gray[1]);
+  expect(result.gray[1]).toBe(result.gray[2]);
+  expect(result.disabled).toEqual(result.neutral);
+  expect(result.original).toEqual(result.neutral);
+  expect(result.rimDisabled).toEqual(result.withoutRim);
+  expect(result.outside).toEqual([0, 0, 0, 0]);
 });
 
 test('actual local segmentation removes an opaque background without sending the photo', async ({ page }) => {
@@ -141,6 +211,12 @@ test('the original bundled text-and-logo layer is rendered without reconstructed
   await page.goto('/');
   await expect(page.locator('#template-label')).toHaveText('העיצוב המקורי שלכם');
   await expect(page.locator('#reset-template')).toHaveText('חזרה לעיצוב המקורי');
+  await page.locator('#effects-panel summary').click();
+  await page.locator('#brightness').fill('130');
+  await page.locator('#contrast').fill('135');
+  await page.locator('#saturation').fill('0');
+  await page.locator('#rim').fill('100');
+  await page.locator('#rim-width').fill('40');
   // The label updates synchronously; canvas rendering is scheduled for the next frame.
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
   const result = await page.evaluate(async () => {

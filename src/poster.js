@@ -1,3 +1,5 @@
+import { processPortrait } from './photo-effects.js';
+
 export const WIDTH = 1080;
 export const HEIGHT = 1350;
 const W = 1080, H = 1350;
@@ -65,14 +67,7 @@ function portrait(ctx, state) {
   const w = h * image.width / image.height;
   const x = 290 - w / 2 + state.x;
   const y = H - h + state.y;
-  if (state.rim > 0 && state.cutout) {
-    ctx.save();
-    ctx.shadowColor = `rgba(255,104,46,${state.rim / 100})`;
-    ctx.shadowBlur = 12; ctx.shadowOffsetX = 7; ctx.shadowOffsetY = -4;
-    ctx.drawImage(image, x, y, w, h);
-    ctx.restore();
-  }
-  ctx.drawImage(image, x, y, w, h);
+  ctx.drawImage(processPortrait(image, state), x, y, w, h);
   const gradient = ctx.createLinearGradient(0, H - 190, 0, H);
   gradient.addColorStop(0, 'transparent'); gradient.addColorStop(1, 'rgba(0,0,0,.55)');
   ctx.fillStyle = gradient; ctx.fillRect(0, H - 190, 670, 190);
