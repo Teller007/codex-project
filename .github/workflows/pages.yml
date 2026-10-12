@@ -34,7 +34,7 @@ jobs:
       - name: Verify uploads, local background removal and poster export
         run: |
           export PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(node --input-type=module -e 'import { chromium } from "@playwright/test"; process.stdout.write(chromium.executablePath());')"
-          npm test
+          npm test -- --reporter=list,github
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload the built site
