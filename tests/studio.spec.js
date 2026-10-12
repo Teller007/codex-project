@@ -2,14 +2,77 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import JSZip from 'jszip';
 
+// New visitors get English even when their browser's preferred language is Hebrew.
+test.use({ locale: 'he-IL' });
+
+test('English is the default, language changes preserve the edited post, and the choice is remembered', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
+  await expect(page.getByRole('combobox', { name: 'Language' })).toHaveValue('en');
+  await expect(page.locator('h1')).toContainText('Your post is ready.');
+  await expect(page.locator('#template-label')).toHaveText('Your original design');
+  await page.locator('#remove-bg').uncheck();
+  await page.locator('#name').fill('Dana Cohen');
+  await page.locator('#title').fill('Founder');
+  await page.locator('#photo').setInputFiles('public/demo-portrait.png');
+  await expect(page.locator('#status')).toContainText('Your photo is ready');
+  await page.locator('#position-panel summary').click();
+  await page.locator('#effects-panel summary').click();
+  await page.locator('#scale').fill('110');
+  await page.locator('#brightness').fill('117');
+  await page.locator('#rim').fill('71');
+  await page.evaluate(() => new Promise(requestAnimationFrame));
+  const originalPoster = await page.locator('#poster').evaluate(canvas => canvas.toDataURL());
+  await page.locator('#language').selectOption('he');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'he');
+  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+  await expect(page.getByRole('combobox', { name: 'שפה' })).toHaveValue('he');
+  await expect(page.locator('h1')).toContainText('הפוסט כבר מוכן.');
+  await expect(page.locator('#name')).toHaveAttribute('placeholder', 'לדוגמה: Dana Cohen');
+  await expect(page.locator('#upload-label')).toHaveText('התמונה שלכם בפנים');
+  await expect(page.locator('#status')).toContainText('התמונה מוכנה');
+  await expect(page.locator('#template-label')).toHaveText('העיצוב המקורי שלכם');
+  await expect(page.locator('#name')).toHaveValue('Dana Cohen');
+  await expect(page.locator('#title')).toHaveValue('Founder');
+  await expect(page.locator('#scale')).toHaveValue('110');
+  await expect(page.locator('#brightness')).toHaveValue('117');
+  await expect(page.locator('#rim')).toHaveValue('71');
+  await expect(page.locator('#position-panel')).toHaveAttribute('open', '');
+  await expect(page.getByRole('button', { name: 'הורדת הפוסט שלי' })).toBeEnabled();
+  expect(await page.locator('#poster').evaluate(canvas => canvas.toDataURL())).toBe(originalPoster);
+  const saved = page.waitForEvent('download');
+  await page.locator('#download').click();
+  const png = await readFile(await (await saved).path());
+  expect(png.equals(Buffer.from(originalPoster.split(',')[1], 'base64'))).toBe(true);
+  await page.locator('#language').selectOption('en');
+  await expect(page.locator('#status')).toContainText('The file was downloaded');
+  await page.locator('#language').selectOption('he');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'he');
+  await expect(page.locator('#language')).toHaveValue('he');
+  await expect(page.locator('#status')).toContainText('הוסיפו שם');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.locator('#language').selectOption('en');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.locator('#photo').setInputFiles({ name: 'not-an-image.txt', mimeType: 'text/plain', buffer: Buffer.from('not an image') });
+  await expect(page.locator('#status')).toContainText('Choose a PNG, JPG or WebP photo.');
+  await page.locator('#language').selectOption('he');
+  await expect(page.locator('#status')).toContainText('בחרו תמונת');
+  await expect(page.locator('#status')).toHaveClass(/error/);
+});
+
 test('upload, live editing, positioning, and correctly sized PNG export', async ({ page }) => {
   const failures = []; page.on('pageerror', (error) => failures.push(error.message));
   await page.goto('/');
-  await expect(page.getByRole('button', { name: 'הורדת הפוסט שלי' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Download my post' })).toBeDisabled();
   await page.locator('#name').fill('Dana Cohen');
   await page.locator('#title').fill('Founder & CEO');
   await page.locator('#photo').setInputFiles('public/demo-portrait.png');
-  await expect(page.locator('#status')).toContainText('התמונה מוכנה', { timeout: 60000 });
+  await expect(page.locator('#status')).toContainText('Your photo is ready', { timeout: 60000 });
   await expect(page.locator('#sample-badge')).toBeHidden();
   const before = await page.locator('#poster').evaluate((canvas) => canvas.toDataURL());
   await page.locator('#name').fill('דנה כהן');
@@ -37,7 +100,7 @@ test('upload, live editing, positioning, and correctly sized PNG export', async 
   await expect(page.locator('#rim-value')).toHaveText('65%');
   await expect(page.locator('#rim-width-value')).toHaveText('18');
   const saved = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'הורדת הפוסט שלי' }).click();
+  await page.getByRole('button', { name: 'Download my post' }).click();
   const file = await saved;
   const png = await readFile(await file.path());
   expect(png.subarray(1, 4).toString()).toBe('PNG');
@@ -113,7 +176,7 @@ test('actual local segmentation removes an opaque background without sending the
     return canvas.toDataURL().split(',')[1];
   });
   await page.locator('#photo').setInputFiles({ name: 'portrait-with-background.png', mimeType: 'image/png', buffer: Buffer.from(opaque, 'base64') });
-  await expect(page.locator('#status')).toContainText('התמונה מוכנה', { timeout: 60000 });
+  await expect(page.locator('#status')).toContainText('Your photo is ready', { timeout: 60000 });
   // Exercise the same implementation with an opaque image and examine the actual alpha mask.
   const result = await page.evaluate(async () => {
     const { readImage, removeBackground } = await import('/src/images.js');
@@ -160,7 +223,7 @@ test('a circular grayscale PNG with transparent corners still has its inner back
 
 test('original transparent overlay appears above the portrait and travels in the shareable site', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('#template-label')).toHaveText('העיצוב המקורי שלכם');
+  await expect(page.locator('#template-label')).toHaveText('Your original design');
   await page.locator('.template-settings summary').click();
   const overlay = await page.evaluate(() => {
     const canvas = document.createElement('canvas'); canvas.width = 1080; canvas.height = 1350;
@@ -168,14 +231,14 @@ test('original transparent overlay appears above the portrait and travels in the
     return canvas.toDataURL().split(',')[1];
   });
   await page.locator('#foreground').setInputFiles({ name: 'original-overlay.png', mimeType: 'image/png', buffer: Buffer.from(overlay, 'base64') });
-  await expect(page.locator('#layer-status')).toContainText('השכבה שלכם נטענה');
+  await expect(page.locator('#layer-status')).toContainText('Your layer is loaded');
   await page.waitForTimeout(200);
   const pixel = await page.locator('#poster').evaluate((canvas) => [...canvas.getContext('2d').getImageData(110, 720, 1, 1).data]);
   expect(pixel).toEqual([34, 221, 153, 255]);
   await page.locator('#name').fill('Private Name');
   await page.locator('#title').fill('Private Title');
   await page.locator('#photo').setInputFiles('public/demo-portrait.png');
-  await expect(page.locator('#status')).toContainText('התמונה מוכנה', { timeout: 60000 });
+  await expect(page.locator('#status')).toContainText('Your photo is ready', { timeout: 60000 });
   const event = page.waitForEvent('download');
   await page.locator('#export-site').click();
   const file = await event;
@@ -198,19 +261,19 @@ test('original transparent overlay appears above the portrait and travels in the
     await route.fulfill({ status: 200, body: await entry.async('nodebuffer'), contentType: mime[extension] || 'application/octet-stream' });
   });
   await restored.goto('http://shared-site.test/campaign/');
-  await expect(restored.locator('#template-label')).toHaveText('העיצוב המקורי שלכם');
+  await expect(restored.locator('#template-label')).toHaveText('Your original design');
   await expect(restored.locator('#name')).toHaveValue('');
   await expect(restored.locator('#title')).toHaveValue('');
   await expect(restored.locator('#download')).toBeDisabled();
   await restored.close();
   await page.locator('#reset-template').click();
-  await expect(page.locator('#template-label')).toContainText('העיצוב המקורי');
+  await expect(page.locator('#template-label')).toContainText('Your original design');
 });
 
 test('the original bundled text-and-logo layer is rendered without reconstructed logos underneath', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('#template-label')).toHaveText('העיצוב המקורי שלכם');
-  await expect(page.locator('#reset-template')).toHaveText('חזרה לעיצוב המקורי');
+  await expect(page.locator('#template-label')).toHaveText('Your original design');
+  await expect(page.locator('#reset-template')).toHaveText('Restore the original design');
   await page.locator('#effects-panel summary').click();
   await page.locator('#brightness').fill('130');
   await page.locator('#contrast').fill('135');
@@ -238,8 +301,8 @@ test('invalid uploads are rejected and mobile stays within the viewport', async 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await page.locator('#photo').setInputFiles({ name: 'not-an-image.txt', mimeType: 'text/plain', buffer: Buffer.from('not an image') });
-  await expect(page.locator('#status')).toContainText('בחרו תמונת');
-  await expect(page.getByRole('button', { name: 'הורדת הפוסט שלי' })).toBeDisabled();
+  await expect(page.locator('#status')).toContainText('Choose a PNG, JPG or WebP photo.');
+  await expect(page.getByRole('button', { name: 'Download my post' })).toBeDisabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.locator('.template-settings summary').click();
   const opaque = await page.evaluate(() => {
@@ -248,5 +311,5 @@ test('invalid uploads are rejected and mobile stays within the viewport', async 
     return canvas.toDataURL().split(',')[1];
   });
   await page.locator('#foreground').setInputFiles({ name: 'opaque.png', mimeType: 'image/png', buffer: Buffer.from(opaque, 'base64') });
-  await expect(page.locator('#layer-status')).toContainText('השכבה אינה שקופה');
+  await expect(page.locator('#layer-status')).toContainText('This layer isn’t transparent');
 });

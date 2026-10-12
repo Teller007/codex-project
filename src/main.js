@@ -8,6 +8,7 @@ import '@fontsource/barlow-condensed/700.css';
 import './style.css';
 import { renderPoster, WIDTH, HEIGHT } from './poster.js';
 import { PHOTO_DEFAULTS } from './photo-effects.js';
+import { t, getLanguage, setLanguage, localizedError } from './i18n.js';
 import { readImage, removeBackground, hasTransparency, loadImage, canvasToBlob, download } from './images.js';
 
 const icons = {
@@ -23,34 +24,82 @@ const icons = {
 };
 const icon = (name, cls = '') => `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
 
+const copy = (key, cls = '') => `<span class="${cls}" data-i18n="${key}">${t(key)}</span>`;
+
 document.querySelector('#app').innerHTML = `
-  <header class="site-header"><a class="brand" href="./" aria-label="Post Studio, עמוד הבית"><span class="brand-mark">p<span>.</span></span><span dir="ltr">POST<span class="brand-divider">/</span>STUDIO</span></a><div class="event-label"><span class="live-dot"></span><span dir="ltr">SPORTS TECH NATION 2026</span></div></header>
-  <main>
-    <section class="intro"><p class="eyebrow">YOUR NEXT POST STARTS HERE</p><h1>אתם בפריים.<br><span>הפוסט כבר מוכן.</span></h1><p class="intro-copy">תמונה שלכם, שם וטייטל. כמה רגעים — ויש לכם פוסט ללינקדאין.</p></section>
-    <div class="workspace">
-      <section class="editor" aria-label="עריכת הפוסט">
-        <div class="section-heading"><div><span class="step-number">01</span><h2>נעים להכיר</h2></div><span class="small-note">הפרטים שלכם</span></div>
-        <div class="field"><label for="name">שם מלא <span>כמו שיופיע בפוסט</span></label><input id="name" type="text" placeholder="לדוגמה: Dana Cohen" maxlength="50" autocomplete="name" dir="auto" /><span id="name-count" class="field-count" aria-hidden="true">0 / 50</span></div>
-        <div class="field"><label for="title">טייטל <span>תפקיד או חברה</span></label><input id="title" type="text" placeholder="לדוגמה: Founder & CEO" maxlength="70" autocomplete="organization-title" dir="auto" /></div>
-        <div class="section-heading photo-heading"><div><span class="step-number">02</span><h2>התמונה שלכם</h2></div><span class="small-note">עכשיו אתם</span></div>
-        <input id="photo" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" aria-label="העלאת תמונה" />
-        <button id="upload" class="upload-area" type="button"><span class="upload-icon">${icon('upload')}</span><strong id="upload-label">העלו תמונה שלכם</strong><span id="upload-hint">גררו לכאן או לחצו לבחירת קובץ</span><span class="file-types" dir="ltr">JPG, PNG, WebP · up to 20 MB</span></button>
-        <div class="photo-guidance">${icon('image')}<p>לתוצאה הכי טובה: צילום מול המצלמה, מהמותניים ומעלה, עם ידיים משולבות.</p></div>
-        <div class="processing-options"><label class="check-option"><input type="checkbox" id="remove-bg" checked /><span>הסרת רקע אוטומטית</span>${icon('sparkle')}</label><p>הפנים והפוזה נשארים כמו בתמונה המקורית.</p><p>אם הרקע כבר הוסר מהתמונה, אפשר לבטל את האפשרות.</p><label class="check-option enhancement-option"><input type="checkbox" id="enhance" checked /><span>עיבוד תמונה עדין</span>${icon('sparkle')}</label><p>שיפור עדין של הבהירות, הקונטרסט והצבע לרקע שחור.</p></div>
-        <details id="position-panel" class="adjustments"><summary>${icon('settings')}<span>דיוק המיקום</span><span class="chevron">⌄</span></summary><div class="sliders"><div class="range-field"><label for="scale">גודל התמונה <output id="scale-value">100%</output></label><input id="scale" type="range" min="60" max="155" value="100" /></div><div class="range-field"><label for="offset-x">מיקום אופקי</label><input id="offset-x" type="range" min="-220" max="220" value="0" /></div><div class="range-field"><label for="offset-y">מיקום אנכי</label><input id="offset-y" type="range" min="-300" max="300" value="0" /></div><button id="reset-position" class="text-button" type="button">${icon('reset')}איפוס מיקום</button></div></details>
-        <details id="effects-panel" class="adjustments"><summary>${icon('sparkle')}<span>תאורה, צבע וזוהר פנימי</span><span class="chevron">⌄</span></summary><div class="sliders"><div class="tone-controls"><div class="range-field"><label for="brightness">בהירות <output id="brightness-value">104%</output></label><input id="brightness" type="range" min="70" max="130" value="104" /></div><div class="range-field"><label for="contrast">קונטרסט <output id="contrast-value">108%</output></label><input id="contrast" type="range" min="80" max="135" value="108" /></div><div class="range-field"><label for="saturation">רוויה <output id="saturation-value">98%</output></label><input id="saturation" type="range" min="0" max="140" value="98" /></div></div><div class="range-field glow-start"><label for="rim">זוהר כתום פנימי <output id="rim-value">65%</output></label><input id="rim" type="range" min="0" max="100" value="65" /></div><div class="range-field"><label for="rim-width">רוחב הזוהר <output id="rim-width-value">18</output></label><input id="rim-width" type="range" min="4" max="40" value="18" /></div><button id="reset-effects" class="text-button" type="button">${icon('reset')}איפוס העיבוד</button><p class="adjustment-note">הזוהר צובע בעדינות את הדמות מבפנים, לאורך הקצוות. הוא פועל על תמונה שהרקע שלה הוסר.</p></div></details>
-        <button id="download" class="primary-button" type="button" disabled>${icon('download')}<span>הורדת הפוסט שלי</span>${icon('arrow')}</button>
-        <p id="status" class="status" role="status" aria-live="polite">הוסיפו שם, טייטל ותמונה כדי להוריד את הפוסט.</p>
-        <div class="privacy">${icon('lock')}<span>התמונה שלכם נשארת בדפדפן. אין העלאה לשרת.</span></div>
-      </section>
-      <section class="preview-section" aria-label="תצוגה מקדימה"><div class="preview-heading"><span><span class="live-dot"></span> תצוגה מקדימה</span><span class="format-pill" dir="ltr">PNG · 1080 × 1350</span></div><div class="poster-stage"><div class="poster-frame"><canvas id="poster" width="${WIDTH}" height="${HEIGHT}" aria-label="תצוגה מקדימה של הפוסט שלכם"></canvas><span id="sample-badge" class="sample-badge">תמונת הדגמה</span></div></div><div class="preview-caption"><span>${icon('check')}מוכן לפיד שלכם</span><span id="template-label">תצוגת דוגמה לפי העיצוב</span></div></section>
+  <header class="site-header">
+    <a class="brand" href="./" data-i18n-aria-label="home" aria-label="${t('home')}"><span class="brand-mark">p<span>.</span></span><span dir="ltr">POST<span class="brand-divider">/</span>STUDIO</span></a>
+    <div class="header-actions"><div class="event-label"><span class="live-dot"></span><span dir="ltr">SPORTS TECH NATION 2026</span></div>
+      <label class="language-picker" for="language">${copy('language', 'visually-hidden')}<select id="language" data-i18n-aria-label="language" aria-label="${t('language')}" dir="ltr"><option value="en" lang="en">English</option><option value="he" lang="he">עברית</option></select></label>
     </div>
-    <details class="template-settings"><summary><span>${icon('settings')}הגדרת העיצוב ושיתוף הטופס</span><span class="chevron">⌄</span></summary><div class="template-content"><div><h3>העיצוב שלכם, בדיוק כמו בקאנבה</h3><p>העלו את שכבת ה-PNG השקופה עם כל הטקסטים והלוגואים, ללא האדם, השם והטייטל. היא תופיע מעל התמונה, על רקע שחור.</p><p class="template-small">התבנית מיועדת לאותם מיקומים כמו בדוגמה. מומלץ לייצא במידות 1080 × 1350, או באותו יחס.</p><label class="secondary-button" for="foreground">${icon('upload')}העלאת שכבת העיצוב</label><input id="foreground" class="visually-hidden" type="file" accept="image/png" /><p id="layer-status" class="layer-status">עדיין לא הועלתה השכבה המקורית. מוצגת הדמיה של העיצוב.</p></div><div class="template-share"><h3>שלחו לאחרים את הטופס שלכם</h3><p>אחרי העלאת שכבת העיצוב, הורידו חבילת אתר. העלו אותה לאחסון אתר סטטי, ושלחו את הקישור למקבלים. העיצוב ייטען אצל כולם באופן אוטומטי.</p><button id="export-site" type="button" class="secondary-button">${icon('download')}הורדת האתר עם העיצוב שלי</button><button id="reset-template" type="button" class="text-button">חזרה לעיצוב הדוגמה</button><p class="template-small">החבילה כוללת את העיצוב בלבד; התמונה והפרטים האישיים שלכם אינם נכללים.</p></div></div></details>
+  </header>
+  <main>
+    <section class="intro"><p class="eyebrow">YOUR NEXT POST STARTS HERE</p><h1>${copy('headlineFirst', 'headline-primary')}<br>${copy('headlineSecond')}</h1><p class="intro-copy" data-i18n="intro">${t('intro')}</p></section>
+    <div class="workspace">
+      <section class="editor" data-i18n-aria-label="editor" aria-label="${t('editor')}">
+        <div class="section-heading"><div><span class="step-number">01</span><h2 data-i18n="meet">${t('meet')}</h2></div>${copy('details', 'small-note')}</div>
+        <div class="field"><label for="name">${copy('name', 'field-name')} ${copy('nameHint')}</label><input id="name" type="text" data-i18n-placeholder="namePlaceholder" placeholder="${t('namePlaceholder')}" maxlength="50" autocomplete="name" dir="auto" /><span id="name-count" class="field-count" aria-hidden="true">0 / 50</span></div>
+        <div class="field"><label for="title">${copy('title', 'field-name')} ${copy('titleHint')}</label><input id="title" type="text" data-i18n-placeholder="titlePlaceholder" placeholder="${t('titlePlaceholder')}" maxlength="70" autocomplete="organization-title" dir="auto" /></div>
+        <div class="section-heading photo-heading"><div><span class="step-number">02</span><h2 data-i18n="photo">${t('photo')}</h2></div>${copy('yourTurn', 'small-note')}</div>
+        <input id="photo" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" data-i18n-aria-label="photoInput" aria-label="${t('photoInput')}" />
+        <button id="upload" class="upload-area" type="button"><span class="upload-icon">${icon('upload')}</span><strong id="upload-label" data-i18n="uploadPhoto">${t('uploadPhoto')}</strong><span id="upload-hint" data-i18n="uploadHint">${t('uploadHint')}</span><span class="file-types" dir="ltr">JPG, PNG, WebP · up to 20 MB</span></button>
+        <div class="photo-guidance">${icon('image')}<p data-i18n="photoGuidance">${t('photoGuidance')}</p></div>
+        <div class="processing-options">
+          <label class="check-option"><input type="checkbox" id="remove-bg" checked />${copy('removeBackground')}${icon('sparkle')}</label><p data-i18n="poseNote">${t('poseNote')}</p><p data-i18n="cutoutNote">${t('cutoutNote')}</p>
+          <label class="check-option enhancement-option"><input type="checkbox" id="enhance" checked />${copy('enhance')}${icon('sparkle')}</label><p data-i18n="enhanceNote">${t('enhanceNote')}</p>
+        </div>
+        <details id="position-panel" class="adjustments"><summary>${icon('settings')}${copy('position')}<span class="chevron">⌄</span></summary><div class="sliders">
+          <div class="range-field"><label for="scale">${copy('scale')} <output id="scale-value">100%</output></label><input id="scale" type="range" min="60" max="155" value="100" /></div>
+          <div class="range-field"><label for="offset-x" data-i18n="horizontal">${t('horizontal')}</label><input id="offset-x" type="range" min="-220" max="220" value="0" /></div>
+          <div class="range-field"><label for="offset-y" data-i18n="vertical">${t('vertical')}</label><input id="offset-y" type="range" min="-300" max="300" value="0" /></div>
+          <button id="reset-position" class="text-button" type="button">${icon('reset')}${copy('resetPosition')}</button>
+        </div></details>
+        <details id="effects-panel" class="adjustments"><summary>${icon('sparkle')}${copy('effects')}<span class="chevron">⌄</span></summary><div class="sliders"><div class="tone-controls">
+          <div class="range-field"><label for="brightness">${copy('brightness')} <output id="brightness-value">104%</output></label><input id="brightness" type="range" min="70" max="130" value="104" /></div>
+          <div class="range-field"><label for="contrast">${copy('contrast')} <output id="contrast-value">108%</output></label><input id="contrast" type="range" min="80" max="135" value="108" /></div>
+          <div class="range-field"><label for="saturation">${copy('saturation')} <output id="saturation-value">98%</output></label><input id="saturation" type="range" min="0" max="140" value="98" /></div>
+        </div><div class="range-field glow-start"><label for="rim">${copy('rim')} <output id="rim-value">65%</output></label><input id="rim" type="range" min="0" max="100" value="65" /></div>
+          <div class="range-field"><label for="rim-width">${copy('rimWidth')} <output id="rim-width-value">18</output></label><input id="rim-width" type="range" min="4" max="40" value="18" /></div>
+          <button id="reset-effects" class="text-button" type="button">${icon('reset')}${copy('resetEffects')}</button><p class="adjustment-note" data-i18n="glowNote">${t('glowNote')}</p>
+        </div></details>
+        <button id="download" class="primary-button" type="button" disabled>${icon('download')}${copy('download')}${icon('arrow')}</button>
+        <p id="status" class="status" role="status" aria-live="polite" data-i18n="initialStatus">${t('initialStatus')}</p>
+        <div class="privacy">${icon('lock')}${copy('privacy')}</div>
+      </section>
+      <section class="preview-section" data-i18n-aria-label="preview" aria-label="${t('preview')}">
+        <div class="preview-heading"><span><span class="live-dot"></span>${copy('preview')}</span><span class="format-pill" dir="ltr">PNG · 1080 × 1350</span></div>
+        <div class="poster-stage"><div class="poster-frame"><canvas id="poster" width="${WIDTH}" height="${HEIGHT}" data-i18n-aria-label="posterPreview" aria-label="${t('posterPreview')}"></canvas><span id="sample-badge" class="sample-badge" data-i18n="demoPhoto">${t('demoPhoto')}</span></div></div>
+        <div class="preview-caption"><span>${icon('check')}${copy('feedReady')}</span><span id="template-label" data-i18n="demoTemplate">${t('demoTemplate')}</span></div>
+      </section>
+    </div>
+    <details class="template-settings"><summary><span>${icon('settings')}${copy('templateSettings')}</span><span class="chevron">⌄</span></summary><div class="template-content"><div>
+      <h3 data-i18n="templateHeading">${t('templateHeading')}</h3><p data-i18n="templateInstructions">${t('templateInstructions')}</p><p class="template-small" data-i18n="templateSize">${t('templateSize')}</p>
+      <label class="secondary-button" for="foreground">${icon('upload')}${copy('uploadLayer')}</label><input id="foreground" class="visually-hidden" type="file" accept="image/png" /><p id="layer-status" class="layer-status" data-i18n="layerMissing">${t('layerMissing')}</p>
+    </div><div class="template-share"><h3 data-i18n="sharingHeading">${t('sharingHeading')}</h3><p data-i18n="sharingInstructions">${t('sharingInstructions')}</p>
+      <button id="export-site" type="button" class="secondary-button">${icon('download')}${copy('exportSite')}</button><button id="reset-template" type="button" class="text-button" data-i18n="resetDemo">${t('resetDemo')}</button><p class="template-small" data-i18n="bundlePrivacy">${t('bundlePrivacy')}</p>
+    </div></div></details>
   </main>
   <footer><span dir="ltr">Made for the people moving sports forward.</span><span dir="ltr">POST / STUDIO <span class="footer-dot">●</span> 2026</span></footer>
 `;
 
 const $ = (selector) => document.querySelector(selector);
+function setCopy(selector, key) {
+  const element = $(selector);
+  element.dataset.i18n = key;
+  element.textContent = t(key);
+}
+function applyLanguage() {
+  document.documentElement.lang = getLanguage();
+  document.documentElement.dir = getLanguage() === 'he' ? 'rtl' : 'ltr';
+  document.querySelector('meta[name="description"]').content = t('pageDescription');
+  document.querySelectorAll('[data-i18n]').forEach((element) => { element.textContent = t(element.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((element) => { element.placeholder = t(element.dataset.i18nPlaceholder); });
+  document.querySelectorAll('[data-i18n-aria-label]').forEach((element) => { element.setAttribute('aria-label', t(element.dataset.i18nAriaLabel)); });
+  $('#language').value = getLanguage();
+}
+$('#language').addEventListener('change', (event) => { setLanguage(event.target.value); applyLanguage(); });
+applyLanguage();
+
 const state = { name: '', title: '', portrait: null, foreground: null, background: null, cutout: true, scale: 1, x: 0, y: 0, ...PHOTO_DEFAULTS, uploaded: false };
 let originalPhoto = null;
 let publishedTemplate = null;
@@ -63,7 +112,7 @@ function draw() {
   $('#download').disabled = busy || !state.uploaded || !state.name.trim() || !state.title.trim();
 }
 function setStatus(message, error = false) {
-  $('#status').textContent = message;
+  setCopy('#status', message);
   $('#status').classList.toggle('error', error);
 }
 function setBusy(value) {
@@ -79,18 +128,18 @@ async function processPhoto() {
   if (!originalPhoto || busy) return;
   setBusy(true);
   const remove = $('#remove-bg').checked;
-  setStatus(remove ? 'מכינים את התמונה ומסירים את הרקע…' : 'מכינים את התמונה…');
+  setStatus(remove ? 'preparingCutout' : 'preparingPhoto');
   try {
     const result = remove ? await removeBackground(originalPhoto) : originalPhoto;
     state.portrait = result;
     state.cutout = hasTransparency(result);
     state.uploaded = true;
     $('#sample-badge').hidden = true;
-    $('#upload-label').textContent = 'התמונה שלכם בפנים';
-    $('#upload-hint').textContent = 'לחצו כדי להחליף תמונה';
+    setCopy('#upload-label', 'photoReadyLabel');
+    setCopy('#upload-hint', 'replacePhoto');
     $('#upload').classList.add('has-image');
-    setStatus('התמונה מוכנה. אפשר לכוון מיקום, תאורה וזוהר לפני ההורדה.');
-  } catch (error) { setStatus(error.message, true); }
+    setStatus('photoReady');
+  } catch (error) { setStatus(error.translationKey || error.message, true); }
   finally { setBusy(false); }
 }
 async function uploadPhoto(file) {
@@ -99,7 +148,7 @@ async function uploadPhoto(file) {
     const next = await readImage(file);
     originalPhoto = next;
     await processPhoto();
-  } catch (error) { setStatus(error.message, true); }
+  } catch (error) { setStatus(error.translationKey || error.message, true); }
 }
 
 $('#upload').addEventListener('click', () => $('#photo').click());
@@ -133,40 +182,40 @@ $('#download').addEventListener('click', async () => {
     renderPoster($('#poster'), state);
     const filename = state.name.trim().replace(/[^\p{L}\p{N}\-_ ]/gu, '').replace(/\s+/g, '-').slice(0, 60) || 'my-post';
     download(await canvasToBlob($('#poster')), `${filename}-sports-tech-nation.png`);
-    setStatus('הפוסט מוכן! הקובץ הורד ואפשר להעלות אותו ללינקדאין.');
-  } catch (error) { setStatus(error.message, true); }
+    setStatus('downloaded');
+  } catch (error) { setStatus(error.translationKey || error.message, true); }
 });
 
 async function setForeground(source) {
-  if (!hasTransparency(source)) throw new Error('השכבה אינה שקופה. ייצאו מקאנבה PNG עם רקע שקוף, כדי שהתמונה תישאר גלויה מתחת לטקסט.');
-  if (Math.abs((source.width / source.height) / (WIDTH / HEIGHT) - 1) > .025) throw new Error('יחס המידות שונה מהתבנית. ייצאו את כל הדף מקאנבה באותו יחס כמו הדוגמה.');
+  if (!hasTransparency(source)) throw localizedError('errorOpaqueLayer');
+  if (Math.abs((source.width / source.height) / (WIDTH / HEIGHT) - 1) > .025) throw localizedError('errorLayerRatio');
   state.foreground = source;
-  $('#template-label').textContent = 'העיצוב המקורי שלכם';
-  $('#layer-status').textContent = 'השכבה שלכם נטענה. כל הטקסטים והלוגואים מוצגים מעל התמונה.';
+  setCopy('#template-label', 'originalTemplate');
+  setCopy('#layer-status', 'layerLoaded');
   draw();
 }
 $('#foreground').addEventListener('change', async (e) => {
   if (!e.target.files[0]) return;
-  try { await setForeground(await readImage(e.target.files[0], { layer: true })); setStatus('העיצוב שלכם נטען בהצלחה.'); }
-  catch (error) { setStatus(error.message, true); $('#layer-status').textContent = error.message; }
+  try { await setForeground(await readImage(e.target.files[0], { layer: true })); setStatus('templateReady'); }
+  catch (error) { setStatus(error.translationKey || error.message, true); setCopy('#layer-status', error.translationKey || error.message); }
   finally { e.target.value = ''; }
 });
 $('#reset-template').addEventListener('click', () => {
   state.foreground = publishedTemplate;
-  $('#template-label').textContent = publishedTemplate ? 'העיצוב המקורי שלכם' : 'תצוגת דוגמה לפי העיצוב';
-  $('#layer-status').textContent = publishedTemplate ? 'העיצוב המקורי שמור וטעון.' : 'מוצגת הדמיה של העיצוב.';
+  setCopy('#template-label', publishedTemplate ? 'originalTemplate' : 'demoTemplate');
+  setCopy('#layer-status', publishedTemplate ? 'layerSaved' : 'demoShown');
   draw();
 });
 
 $('#export-site').addEventListener('click', async () => {
   const button = $('#export-site');
   button.disabled = true;
-  setStatus('מכינים את האתר לשיתוף…');
+  setStatus('preparingSite');
   try {
     const { default: JSZip } = await import('jszip');
     const base = import.meta.env.DEV ? '/site-export/' : import.meta.env.BASE_URL;
     const response = await fetch(`${base}site-manifest.json`);
-    if (!response.ok) throw new Error('חבילת האתר עדיין לא נבנתה. הריצו npm run build ונסו שוב.');
+    if (!response.ok) throw localizedError('errorSiteNotBuilt');
     const files = await response.json();
     const zip = new JSZip();
     // Small batches keep memory and simultaneous requests bounded on mobile.
@@ -174,15 +223,15 @@ $('#export-site').addEventListener('click', async () => {
       await Promise.all(files.slice(i, i + 4).map(async (file) => {
         if (file === 'template.json' || file === 'site-manifest.json') return;
         const asset = await fetch(`${base}${file}`);
-        if (!asset.ok) throw new Error('אחד מקבצי האתר לא נטען. נסו שוב.');
+        if (!asset.ok) throw localizedError('errorSiteAsset');
         zip.file(file, await asset.arrayBuffer());
       }));
     }
     zip.file('template.json', JSON.stringify({ version: 1, foreground: state.foreground ? state.foreground.toDataURL('image/png') : null }));
     zip.file('site-manifest.json', JSON.stringify([...new Set([...files, 'template.json'])]));
     download(await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 4 } }), 'sports-tech-post-studio.zip');
-    setStatus('האתר הורד עם העיצוב שלכם. העלו את החבילה לאחסון אתר סטטי ושלחו את הקישור.');
-  } catch (error) { setStatus(error.message, true); }
+    setStatus('siteReady');
+  } catch (error) { setStatus(error.translationKey || error.message, true); }
   finally { button.disabled = false; }
 });
 
@@ -218,7 +267,7 @@ try {
       canvas.getContext('2d').drawImage(image, 0, 0);
       await setForeground(canvas);
       publishedTemplate = canvas;
-      $('#reset-template').textContent = 'חזרה לעיצוב המקורי';
+      setCopy('#reset-template', 'resetOriginal');
     }
   }
-} catch { setStatus('לא ניתן לטעון את שכבת העיצוב השמורה. אפשר להעלות אותה דרך הגדרות העיצוב.', true); }
+} catch { setStatus('errorTemplateLoad', true); }

@@ -1,3 +1,5 @@
+import { localizedError } from './i18n.js';
+
 const MAX_BYTES = 20 * 1024 * 1024;
 let segmenter;
 let loading;
@@ -6,21 +8,21 @@ export async function loadImage(src) {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('לא הצלחנו לקרוא את התמונה. נסו קובץ PNG, JPG או WebP.'));
+    image.onerror = () => reject(localizedError('errorReadImage'));
     image.src = src;
   });
 }
 
 export async function readImage(file, { layer = false } = {}) {
   if (!file || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-    throw new Error('בחרו תמונת PNG, JPG או WebP.');
+    throw localizedError('errorImageType');
   }
-  if (layer && file.type !== 'image/png') throw new Error('לשכבת עיצוב יש לבחור קובץ PNG.');
-  if (file.size > MAX_BYTES) throw new Error('התמונה גדולה מדי. אפשר להעלות קובץ עד 20MB.');
+  if (layer && file.type !== 'image/png') throw localizedError('errorLayerType');
+  if (file.size > MAX_BYTES) throw localizedError('errorImageSize');
   const url = URL.createObjectURL(file);
   try {
     const image = await loadImage(url);
-    if (image.naturalWidth * image.naturalHeight > 50_000_000) throw new Error('רזולוציית התמונה גדולה מדי. הקטינו אותה ונסו שוב.');
+    if (image.naturalWidth * image.naturalHeight > 50_000_000) throw localizedError('errorResolution');
     const ratio = Math.min(1, (layer ? 2500 : 1800) / Math.max(image.naturalWidth, image.naturalHeight));
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(image.naturalWidth * ratio);
@@ -52,7 +54,7 @@ async function getSegmenter() {
         const script = document.createElement('script');
         script.src = `${import.meta.env.BASE_URL}vendor/segmentation/selfie_segmentation.js`;
         script.onload = resolve;
-        script.onerror = () => { script.remove(); reject(new Error('לא ניתן לטעון את כלי הסרת הרקע. אפשר להעלות PNG שכבר הוסר ממנו הרקע.')); };
+        script.onerror = () => { script.remove(); reject(localizedError('errorModelLoad')); };
         document.head.appendChild(script);
       });
     }
@@ -85,7 +87,7 @@ export async function removeBackground(source) {
     return trimTransparent(output);
   } catch (error) {
     console.warn('Background removal unavailable:', error.message);
-    throw new Error('הסרת הרקע לא הצליחה בדפדפן הזה. נסו Chrome או העלו PNG עם רקע שקוף.');
+    throw localizedError('errorSegmentation');
   }
 }
 
@@ -102,7 +104,7 @@ export function trimTransparent(source) {
     }
   }
   if (right < left || (right - left) * (bottom - top) < source.width * source.height * .015) {
-    throw new Error('לא זוהה אדם בתמונה. נסו צילום ברור שבו רואים את הפנים ואת פלג הגוף העליון.');
+    throw localizedError('errorNoPerson');
   }
   left = Math.max(0, left - 6); top = Math.max(0, top - 6);
   right = Math.min(source.width, right + 8); bottom = Math.min(source.height, bottom + 8);
@@ -113,7 +115,7 @@ export function trimTransparent(source) {
 }
 
 export function canvasToBlob(canvas) {
-  return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('לא הצלחנו ליצור את הקובץ. נסו שוב.')), 'image/png'));
+  return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(localizedError('errorPngExport')), 'image/png'));
 }
 
 export function download(blob, filename) {
