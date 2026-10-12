@@ -5,6 +5,74 @@ import JSZip from 'jszip';
 // New visitors get English even when their browser's preferred language is Hebrew.
 test.use({ locale: 'he-IL' });
 
+for (const language of ['en', 'he']) {
+  test(`mobile compact preview stays visible and updates during editing (${language})`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+    await expect(page.locator('#template-label')).toHaveText('Your original design');
+    if (language === 'he') await page.locator('#language').selectOption('he');
+    await expect(page.locator('#mobile-preview')).toBeHidden();
+    const originalGeometry = await page.locator('#poster').evaluate(canvas => ({ top: canvas.getBoundingClientRect().top + scrollY, width: canvas.getBoundingClientRect().width }));
+    await page.locator('#remove-bg').uncheck();
+    await page.locator('#name').fill('Dana Cohen');
+    await page.locator('#title').fill('Founder');
+    await page.locator('#photo').setInputFiles('public/demo-portrait.png');
+    await expect(page.locator('#status')).toContainText(language === 'he' ? 'התמונה מוכנה' : 'Your photo is ready');
+    await page.locator('#position-panel').evaluate(details => { details.open = true; });
+    await page.locator('#effects-panel').evaluate(details => { details.open = true; });
+    await page.locator('#brightness').evaluate(input => {
+      const poster = document.querySelector('#poster');
+      const compactHeight = poster.getBoundingClientRect().width / 2 * 1350 / 1080 + 24;
+      window.scrollTo({ top: scrollY + input.getBoundingClientRect().top - compactHeight - 60, behavior: 'instant' });
+    });
+    await expect(page.locator('#mobile-preview')).toBeVisible();
+    const geometry = await page.evaluate(() => {
+      const full = document.querySelector('#poster').getBoundingClientRect();
+      const mini = document.querySelector('#mobile-poster').getBoundingClientRect();
+      const panel = document.querySelector('#mobile-preview').getBoundingClientRect();
+      const control = document.querySelector('#brightness').getBoundingClientRect();
+      return { originalTop: full.top + scrollY, fullWidth: full.width, miniWidth: mini.width, panelTop: panel.top, panelBottom: panel.bottom, controlTop: control.top };
+    });
+    expect(geometry.originalTop).toBeCloseTo(originalGeometry.top, 0);
+    expect(geometry.fullWidth).toBe(originalGeometry.width);
+    expect(geometry.miniWidth).toBeCloseTo(geometry.fullWidth / 2, 0);
+    expect(geometry.panelTop).toBe(0);
+    expect(geometry.controlTop).toBeGreaterThan(geometry.panelBottom + 10);
+    const before = await page.locator('#mobile-poster').evaluate(canvas => canvas.toDataURL());
+    await page.locator('#brightness').fill('125');
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    expect(await page.locator('#mobile-poster').evaluate(canvas => canvas.toDataURL())).not.toBe(before);
+    const bright = await page.locator('#mobile-poster').evaluate(canvas => canvas.toDataURL());
+    await page.locator('#offset-x').fill('50');
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    expect(await page.locator('#mobile-poster').evaluate(canvas => canvas.toDataURL())).not.toBe(bright);
+    await expect(page.locator('#mobile-preview')).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 360 });
+    await expect(page.locator('#mobile-preview')).toBeVisible();
+    await expect.poll(() => page.locator('#mobile-preview').evaluate(panel => panel.getBoundingClientRect().height)).toBeLessThanOrEqual(360 * .3);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(() => page.locator('#mobile-preview').evaluate(panel => panel.getBoundingClientRect().height)).toBeGreaterThan(150);
+    const saved = page.waitForEvent('download');
+    await page.locator('#download').click();
+    const png = await readFile(await (await saved).path());
+    expect(png.readUInt32BE(16)).toBe(1080); expect(png.readUInt32BE(20)).toBe(1350);
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+    await expect(page.locator('#mobile-preview')).toBeHidden();
+    await page.locator('#brightness').evaluate(input => { window.scrollTo({ top: scrollY + input.getBoundingClientRect().top - 300, behavior: 'instant' }); });
+    await expect(page.locator('#mobile-preview')).toBeVisible();
+    await page.locator('#full-preview').click();
+    await expect(page.locator('#mobile-preview')).toBeHidden();
+    expect(await page.locator('#poster').evaluate(canvas => canvas.getBoundingClientRect().width)).toBe(originalGeometry.width);
+    await page.locator('#brightness').evaluate(input => { window.scrollTo({ top: scrollY + input.getBoundingClientRect().top - 300, behavior: 'instant' }); });
+    await expect(page.locator('#mobile-preview')).toBeVisible();
+    await page.locator('.template-settings').evaluate(details => { details.open = true; });
+    await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
+    await expect(page.locator('#mobile-preview')).toBeHidden();
+    await page.setViewportSize({ width: 1360, height: 900 });
+    await expect(page.locator('#mobile-preview')).toBeHidden();
+  });
+}
+
 test('English is the default, language changes preserve the edited post, and the choice is remembered', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');

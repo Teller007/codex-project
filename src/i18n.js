@@ -57,6 +57,8 @@ const messages = {
   downloaded: ['Your post is ready! The file was downloaded and can be shared on LinkedIn.', 'הפוסט מוכן! הקובץ הורד ואפשר להעלות אותו ללינקדאין.'],
   privacy: ['Your photo stays in your browser. Nothing is uploaded to a server.', 'התמונה שלכם נשארת בדפדפן. אין העלאה לשרת.'],
   preview: ['Live preview', 'תצוגה מקדימה'],
+  compactPreviewNote: ['See your changes as you edit.', 'השינויים מופיעים כאן תוך כדי עריכה.'],
+  fullPreview: ['Full preview ↑', 'לתצוגה המלאה ↑'],
   posterPreview: ['Preview of your post', 'תצוגה מקדימה של הפוסט שלכם'],
   demoPhoto: ['Demo photo', 'תמונת הדגמה'],
   feedReady: ['Ready for your feed', 'מוכן לפיד שלכם'],

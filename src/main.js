@@ -9,6 +9,7 @@ import './style.css';
 import { renderPoster, WIDTH, HEIGHT } from './poster.js';
 import { PHOTO_DEFAULTS } from './photo-effects.js';
 import { t, getLanguage, setLanguage, localizedError } from './i18n.js';
+import { setupMobilePreview } from './mobile-preview.js';
 import { readImage, removeBackground, hasTransparency, loadImage, canvasToBlob, download } from './images.js';
 
 const icons = {
@@ -79,6 +80,7 @@ document.querySelector('#app').innerHTML = `
       <button id="export-site" type="button" class="secondary-button">${icon('download')}${copy('exportSite')}</button><button id="reset-template" type="button" class="text-button" data-i18n="resetDemo">${t('resetDemo')}</button><p class="template-small" data-i18n="bundlePrivacy">${t('bundlePrivacy')}</p>
     </div></div></details>
   </main>
+  <aside id="mobile-preview" class="mobile-preview" hidden data-i18n-aria-label="preview" aria-label="${t('preview')}"><canvas id="mobile-poster" aria-hidden="true"></canvas><div class="mobile-preview-info"><p class="mobile-preview-heading"><span class="live-dot"></span>${copy('preview')}</p><p class="mobile-preview-note" data-i18n="compactPreviewNote">${t('compactPreviewNote')}</p><button id="full-preview" class="text-button" type="button" data-i18n="fullPreview">${t('fullPreview')}</button></div></aside>
   <footer><span dir="ltr">Made for the people moving sports forward.</span><span dir="ltr">POST / STUDIO <span class="footer-dot">●</span> 2026</span></footer>
 `;
 
@@ -105,10 +107,11 @@ let originalPhoto = null;
 let publishedTemplate = null;
 let busy = false;
 let drawFrame;
+const mobilePreview = setupMobilePreview({ poster: $('#poster'), panel: $('#mobile-preview'), editor: $('.editor'), returnButton: $('#full-preview') });
 
 function draw() {
   cancelAnimationFrame(drawFrame);
-  drawFrame = requestAnimationFrame(() => renderPoster($('#poster'), state));
+  drawFrame = requestAnimationFrame(() => { renderPoster($('#poster'), state); mobilePreview.sync(); });
   $('#download').disabled = busy || !state.uploaded || !state.name.trim() || !state.title.trim();
 }
 function setStatus(message, error = false) {
@@ -180,6 +183,7 @@ $('#download').addEventListener('click', async () => {
   try {
     await document.fonts.ready;
     renderPoster($('#poster'), state);
+    mobilePreview.sync();
     const filename = state.name.trim().replace(/[^\p{L}\p{N}\-_ ]/gu, '').replace(/\s+/g, '-').slice(0, 60) || 'my-post';
     download(await canvasToBlob($('#poster')), `${filename}-sports-tech-nation.png`);
     setStatus('downloaded');
