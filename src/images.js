@@ -65,7 +65,8 @@ async function getSegmenter() {
 }
 
 export async function removeBackground(source) {
-  if (hasTransparency(source)) return trimTransparent(source);
+  // Transparent corners (for example in a circular profile photo) do not
+  // establish that the photographic background inside the image is removed.
   const model = await getSegmenter();
   let output;
   model.onResults((results) => {

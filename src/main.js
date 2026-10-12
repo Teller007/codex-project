@@ -35,7 +35,7 @@ document.querySelector('#app').innerHTML = `
         <input id="photo" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" aria-label="העלאת תמונה" />
         <button id="upload" class="upload-area" type="button"><span class="upload-icon">${icon('upload')}</span><strong id="upload-label">העלו תמונה שלכם</strong><span id="upload-hint">גררו לכאן או לחצו לבחירת קובץ</span><span class="file-types" dir="ltr">JPG, PNG, WebP · up to 20 MB</span></button>
         <div class="photo-guidance">${icon('image')}<p>לתוצאה הכי טובה: צילום מול המצלמה, מהמותניים ומעלה, עם ידיים משולבות.</p></div>
-        <div class="processing-options"><label class="check-option"><input type="checkbox" id="remove-bg" checked /><span>הסרת רקע אוטומטית</span>${icon('sparkle')}</label><p>הפנים והפוזה נשארים כמו בתמונה המקורית.</p></div>
+        <div class="processing-options"><label class="check-option"><input type="checkbox" id="remove-bg" checked /><span>הסרת רקע אוטומטית</span>${icon('sparkle')}</label><p>הפנים והפוזה נשארים כמו בתמונה המקורית.</p><p>אם הרקע כבר הוסר מהתמונה, אפשר לבטל את האפשרות.</p></div>
         <details id="position-panel" class="adjustments"><summary>${icon('settings')}<span>דיוק המיקום והתאורה</span><span class="chevron">⌄</span></summary><div class="sliders"><div class="range-field"><label for="scale">גודל התמונה <output id="scale-value">100%</output></label><input id="scale" type="range" min="60" max="155" value="100" /></div><div class="range-field"><label for="offset-x">מיקום אופקי</label><input id="offset-x" type="range" min="-220" max="220" value="0" /></div><div class="range-field"><label for="offset-y">מיקום אנכי</label><input id="offset-y" type="range" min="-300" max="300" value="0" /></div><div class="range-field"><label for="rim">אור כתום בקצוות <output id="rim-value">65%</output></label><input id="rim" type="range" min="0" max="100" value="65" /></div><button id="reset-position" class="text-button" type="button">${icon('reset')}איפוס מיקום</button><p class="adjustment-note">האפקט מוסיף זוהר בקצוות; הוא אינו משנה את התאורה על הפנים.</p></div></details>
         <button id="download" class="primary-button" type="button" disabled>${icon('download')}<span>הורדת הפוסט שלי</span>${icon('arrow')}</button>
         <p id="status" class="status" role="status" aria-live="polite">הוסיפו שם, טייטל ותמונה כדי להוריד את הפוסט.</p>
@@ -51,6 +51,7 @@ document.querySelector('#app').innerHTML = `
 const $ = (selector) => document.querySelector(selector);
 const state = { name: '', title: '', portrait: null, foreground: null, background: null, cutout: true, scale: 1, x: 0, y: 0, rim: 65, uploaded: false };
 let originalPhoto = null;
+let publishedTemplate = null;
 let busy = false;
 let drawFrame;
 
@@ -136,9 +137,9 @@ $('#foreground').addEventListener('change', async (e) => {
   finally { e.target.value = ''; }
 });
 $('#reset-template').addEventListener('click', () => {
-  state.foreground = null;
-  $('#template-label').textContent = 'תצוגת דוגמה לפי העיצוב';
-  $('#layer-status').textContent = 'מוצגת הדמיה של העיצוב.';
+  state.foreground = publishedTemplate;
+  $('#template-label').textContent = publishedTemplate ? 'העיצוב המקורי שלכם' : 'תצוגת דוגמה לפי העיצוב';
+  $('#layer-status').textContent = publishedTemplate ? 'העיצוב המקורי שמור וטעון.' : 'מוצגת הדמיה של העיצוב.';
   draw();
 });
 
@@ -187,11 +188,22 @@ try {
   const response = await fetch(`${import.meta.env.BASE_URL}template.json`);
   if (response.ok) {
     const config = await response.json();
-    if (config.version === 1 && typeof config.foreground === 'string' && config.foreground.startsWith('data:image/png;base64,') && config.foreground.length < 30_000_000) {
-      const image = await loadImage(config.foreground);
+    let source = null;
+    if (config.version === 1 && typeof config.foreground === 'string' && config.foreground.length < 30_000_000) {
+      if (config.foreground.startsWith('data:image/png;base64,')) source = config.foreground;
+      else {
+        const base = new URL(import.meta.env.BASE_URL, location.href);
+        const asset = new URL(config.foreground, base);
+        if (asset.origin === base.origin && asset.pathname.startsWith(base.pathname) && asset.pathname.endsWith('.png')) source = asset.href;
+      }
+    }
+    if (source) {
+      const image = await loadImage(source);
       const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
       canvas.getContext('2d').drawImage(image, 0, 0);
       await setForeground(canvas);
+      publishedTemplate = canvas;
+      $('#reset-template').textContent = 'חזרה לעיצוב המקורי';
     }
   }
 } catch { setStatus('לא ניתן לטעון את שכבת העיצוב השמורה. אפשר להעלות אותה דרך הגדרות העיצוב.', true); }

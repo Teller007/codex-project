@@ -9,7 +9,7 @@ test('upload, live editing, positioning, and correctly sized PNG export', async 
   await page.locator('#name').fill('Dana Cohen');
   await page.locator('#title').fill('Founder & CEO');
   await page.locator('#photo').setInputFiles('public/demo-portrait.png');
-  await expect(page.locator('#status')).toContainText('התמונה מוכנה');
+  await expect(page.locator('#status')).toContainText('התמונה מוכנה', { timeout: 60000 });
   await expect(page.locator('#sample-badge')).toBeHidden();
   const before = await page.locator('#poster').evaluate((canvas) => canvas.toDataURL());
   await page.locator('#name').fill('דנה כהן');
@@ -61,6 +61,33 @@ test('actual local segmentation removes an opaque background without sending the
   expect(external).toEqual([]);
 });
 
+test('a circular grayscale PNG with transparent corners still has its inner background removed', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const { removeBackground, hasTransparency } = await import('/src/images.js');
+    const image = new Image(); image.src = '/demo-portrait.png'; await image.decode();
+    const source = document.createElement('canvas'); source.width = source.height = 720;
+    const ctx = source.getContext('2d');
+    ctx.fillStyle = '#e5e5e5'; ctx.fillRect(0, 0, 720, 720);
+    ctx.filter = 'grayscale(1)'; ctx.drawImage(image, 110, 15, 530, 690); ctx.filter = 'none';
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.beginPath(); ctx.arc(360, 360, 350, 0, Math.PI * 2); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+    const cutout = await removeBackground(source);
+    const pixels = cutout.getContext('2d').getImageData(0, 0, cutout.width, cutout.height).data;
+    let background = 0, person = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      if (pixels[i + 3] < 240) continue;
+      if (pixels[i] === 229 && pixels[i + 1] === 229 && pixels[i + 2] === 229) background++;
+      else person++;
+    }
+    return { sourceTransparent: hasTransparency(source), background: background / (pixels.length / 4), person: person / (pixels.length / 4) };
+  });
+  expect(result.sourceTransparent).toBe(true);
+  expect(result.person).toBeGreaterThan(.25);
+  expect(result.background).toBeLessThan(.06);
+});
+
 test('original transparent overlay appears above the portrait and travels in the shareable site', async ({ page }) => {
   await page.goto('/');
   await page.locator('.template-settings summary').click();
@@ -77,7 +104,7 @@ test('original transparent overlay appears above the portrait and travels in the
   await page.locator('#name').fill('Private Name');
   await page.locator('#title').fill('Private Title');
   await page.locator('#photo').setInputFiles('public/demo-portrait.png');
-  await expect(page.locator('#status')).toContainText('התמונה מוכנה');
+  await expect(page.locator('#status')).toContainText('התמונה מוכנה', { timeout: 60000 });
   const event = page.waitForEvent('download');
   await page.locator('#export-site').click();
   const file = await event;
@@ -106,7 +133,26 @@ test('original transparent overlay appears above the portrait and travels in the
   await expect(restored.locator('#download')).toBeDisabled();
   await restored.close();
   await page.locator('#reset-template').click();
-  await expect(page.locator('#template-label')).toContainText('תצוגת דוגמה');
+  await expect(page.locator('#template-label')).toContainText('העיצוב המקורי');
+});
+
+test('the original bundled text-and-logo layer is rendered without reconstructed logos underneath', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#template-label')).toHaveText('העיצוב המקורי שלכם');
+  await expect(page.locator('#reset-template')).toHaveText('חזרה לעיצוב המקורי');
+  const result = await page.evaluate(async () => {
+    const image = new Image(); image.src = '/template-overlay.png'; await image.decode();
+    const canvas = document.createElement('canvas'); canvas.width = 1080; canvas.height = 160;
+    const ctx = canvas.getContext('2d'); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 1080, 160); ctx.drawImage(image, 0, 0);
+    const expected = ctx.getImageData(0, 0, 1080, 160).data;
+    const actual = document.querySelector('#poster').getContext('2d').getImageData(0, 0, 1080, 160).data;
+    let differences = 0, visibleArtwork = 0;
+    for (let i = 0; i < actual.length; i++) if (actual[i] !== expected[i]) differences++;
+    for (let i = 0; i < expected.length; i += 4) if (expected[i] + expected[i + 1] + expected[i + 2] > 0) visibleArtwork++;
+    return { differences, visibleArtwork };
+  });
+  expect(result.visibleArtwork).toBeGreaterThan(1000);
+  expect(result.differences).toBe(0);
 });
 
 test('invalid uploads are rejected and mobile stays within the viewport', async ({ page }) => {

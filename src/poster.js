@@ -84,7 +84,7 @@ export function renderPoster(canvas, state) {
   ctx.scale(WIDTH / W, HEIGHT / H);
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
   if (state.background) ctx.drawImage(state.background, 0, 0, W, H);
-  else defaultBrand(ctx);
+  else if (!state.foreground) defaultBrand(ctx);
   portrait(ctx, state);
   if (state.foreground) ctx.drawImage(state.foreground, 0, 0, W, H);
   else defaultHeadline(ctx);
